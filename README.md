@@ -103,6 +103,7 @@
 | `ws_write_file` | 写文件（自动备份 + 语法检查） |
 | `ws_rollback` | 回滚到最近一次备份；`reason` 含「演练」时只算演练 |
 | `ws_check_syntax` | 单独做一次 `.py` / `.json` 语法检查 |
+| `ws_sandbox_test` | 把插件目录送进一次性沙箱容器：语法、JSON、单测；沙箱无网络、不挂宿主目录、用完即毁 |
 | `ws_reload_plugin` | 重载指定插件 |
 
 边界（默认值）：
@@ -115,6 +116,8 @@
 - 只有管理员能用；每次写 / 回滚 / 重载都追加到 `notes.md`，并写事件账本 `events.jsonl` 供考核消费。
 
 > 两个插件可以分开装：只用工坊不装考核也能跑；反过来不行——考核的积分来源就是工坊的事件账本。
+
+沙箱工具需要主人在服务器上额外部署一个 runner（一个只有 `/run` 的本地小服务 + 一次性容器镜像），见 [docs/deployment.md](docs/deployment.md#沙箱-runner可选)。没部署时 `ws_sandbox_test` 会直接提示「沙箱还没配好」，不影响其余工具。
 
 ## 安装
 

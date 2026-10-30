@@ -20,12 +20,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import hashlib
+import io
 import json
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -61,6 +66,39 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _sandbox_tar(plugin_dir: Path, max_bytes: int) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for p in sorted(plugin_dir.rglob("*")):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(plugin_dir)
+            if "__pycache__" in rel.parts:
+                continue
+            if rel.parts and rel.parts[0] in {"data", ".git", "vendor"}:
+                continue
+            if p.suffix.lower() not in ALLOWED_SUFFIXES:
+                continue
+            if p.stat().st_size > max_bytes:
+                continue
+            info = tar.gettarinfo(str(p), arcname=str(rel))
+            with p.open("rb") as f:
+                tar.addfile(info, f)
+    return buf.getvalue()
+
+
+def _sandbox_post(plugin_dir: Path, url: str, token: str, max_bytes: int, timeout: int = 90) -> dict:
+    tar_bytes = _sandbox_tar(plugin_dir, max_bytes)
+    payload = json.dumps({"tar": base64.b64encode(tar_bytes).decode(), "timeout": 60}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"X-Token": token, "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
 
 @register(PLUGIN_NAME, "溟月", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚", "1.0.0")
@@ -399,6 +437,36 @@ class MoonWorkshop(Star):
             return f"没有这个文件：{rp}"
         ok, msg = self._check_file(rp)
         return ("通过：" if ok else "没过：") + msg
+
+    @filter.llm_tool(name="ws_sandbox_test")
+    async def ws_sandbox_test(self, event: AstrMessageEvent, path: str) -> str:
+        """在一次性沙箱容器里检查一个插件目录：语法、JSON 合法性、以及 tests/ 里的单测。沙箱没有网络、不挂宿主目录、用完即毁。
+
+        Args:
+            path(string): 插件目录路径，例如 /AstrBot/data/plugins/astrbot_plugin_moon_concise
+        """
+        if err := self._owner_only(event):
+            return err
+        rp, err = self._allowed_path(path)
+        if not rp:
+            return err
+        if not rp.is_dir():
+            return "沙箱只收插件目录。"
+        url = str(self._conf("sandbox_url", "") or "").strip()
+        token = str(self._conf("sandbox_token", "") or "").strip()
+        if not url or not token:
+            return "沙箱还没配好：让主人把 sandbox_url 和 sandbox_token 填进工坊配置。"
+        rel = str(self._rel_path(rp))
+        try:
+            resp = await asyncio.to_thread(_sandbox_post, rp, url, token, self.max_bytes)
+        except Exception as e:
+            self._event("sandbox_fail", rel)
+            return f"沙箱没回应：{e}"
+        ok = bool(resp.get("ok"))
+        self._event("sandbox_ok" if ok else "sandbox_fail", rel)
+        head = "沙箱通过" if ok else "沙箱没过"
+        log = str(resp.get("log", ""))[-2500:]
+        return f"{head}\n{log}"
 
     @filter.llm_tool(name="ws_reload_plugin")
     async def ws_reload_plugin(self, event: AstrMessageEvent, plugin: str = "") -> str:

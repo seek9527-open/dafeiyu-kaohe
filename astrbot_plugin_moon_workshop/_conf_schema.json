@@ -18,5 +18,15 @@
     "type": "string",
     "description": "改动笔记的文件名（存在工坊数据目录里）",
     "default": "notes.md"
+  },
+  "sandbox_url": {
+    "type": "string",
+    "description": "沙箱 runner 的地址，由主人部署后填写；留空则禁用沙箱工具",
+    "default": "http://172.17.0.1:8791/run"
+  },
+  "sandbox_token": {
+    "type": "string",
+    "description": "沙箱 runner 的访问令牌，与服务器上 /root/moon_sandbox/token 一致",
+    "default": ""
   }
 }

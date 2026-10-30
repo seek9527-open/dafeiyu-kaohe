@@ -83,3 +83,31 @@ docker restart astrbot
 
 **日志里 `[moon_gate] 状态文件坏了`**
 `gate.json` 不是合法 JSON 时会重来，旧文件不会自动备份。建议定期备份。
+
+## 沙箱 runner（可选）
+
+`ws_sandbox_test` 需要一个宿主上的小服务：它把插件目录打包，丢进一次性容器里做语法 / JSON / 单测检查。沙箱容器 `--network=none`、根文件系统只读、只挂一个 tmpfs、去掉全部 capabilities、用完即毁，不碰宿主的 `/AstrBot/data`。
+
+部署（Docker 宿主机上）：
+
+```bash
+mkdir -p /root/moon_sandbox && cd /root/moon_sandbox
+# runner.py / Dockerfile / run.sh 见仓库同目录
+head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > token
+docker build -q -t moon-sandbox:1 .
+nohup python3 runner.py > runner.log 2>&1 &
+curl -s http://172.17.0.1:8791/health
+```
+
+然后在工坊配置 `data/config/astrbot_plugin_moon_workshop_config.json` 里填：
+
+```json
+{"sandbox_url": "http://172.17.0.1:8791/run", "sandbox_token": "<token 文件内容>"}
+```
+
+说明：
+
+- runner 默认只监听 `172.17.0.1:8791`（Docker bridge 网关），公网访问不到；所有请求要带 `X-Token`。
+- 容器命令固定为 `sh /opt/harness/run.sh`，不接受任意 shell；超时强杀。
+- runner 本身以 root 运行 docker，属于信任边界内组件；不要把它暴露到公网，也不要在里面执行用户提交的任意命令。
+- 更彻底的做法是把「写代码」和「上线代码」拆成两个目录（staging → promote），沙箱只测 staging，promote 走人工或审批。这一点目前留给部署方按需实现。

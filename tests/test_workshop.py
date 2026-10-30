@@ -1,7 +1,9 @@
 """工坊插件测试：路径白名单、备份、语法检查、回滚与限流。"""
 
 import asyncio
+import io
 import json
+import tarfile
 
 
 class FakeEvent:
@@ -154,3 +156,20 @@ def test_owner_only(workshop_module, tmp_path, monkeypatch):
 
     reply = run(ws.ws_write_file(FakeEvent(admin=False), str(plugins / "demo5" / "a.txt"), "x"))
     assert "主人" in reply
+
+
+def test_sandbox_tar_skips_data_dir(workshop_module, tmp_path):
+    plugin = tmp_path / "demo_pkg"
+    (plugin / "data").mkdir(parents=True)
+    (plugin / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (plugin / "_conf_schema.json").write_text("{}", encoding="utf-8")
+    (plugin / "data" / "cmd_config.json").write_text('{"secret": 1}', encoding="utf-8")
+
+    raw = workshop_module._sandbox_tar(plugin, 1024 * 1024)
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+        names = tar.getnames()
+
+    assert "main.py" in names
+    assert "_conf_schema.json" in names
+    assert all(not name.startswith("data/") for name in names)
+

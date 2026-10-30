@@ -2,6 +2,13 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.2.0] - 2026-10-31
+
+### 新增
+
+- 工坊新增 `ws_sandbox_test`：把插件目录送进一次性沙箱容器跑语法、JSON 与单测，沙箱无网络、不挂宿主目录、用完即毁。
+- 仓库附带沙箱 runner（`moon_sandbox/`：`runner.py`、`Dockerfile`、`run.sh`）与部署说明。
+
 ## [1.1.0] - 2026-10-31
 
 ### 新增
