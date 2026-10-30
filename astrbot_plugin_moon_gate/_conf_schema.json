@@ -1,0 +1,37 @@
+{
+  "l1_score": {
+    "type": "int",
+    "default": 20,
+    "description": "L1 所需积分"
+  },
+  "l1_days": {
+    "type": "int",
+    "default": 7,
+    "description": "L1 要求最近多少天内无语法失败/回滚"
+  },
+  "l1_write_ops": {
+    "type": "int",
+    "default": 3,
+    "description": "L1 要求至少多少次成功写入"
+  },
+  "l2_score": {
+    "type": "int",
+    "default": 60,
+    "description": "L2 所需积分"
+  },
+  "l2_days": {
+    "type": "int",
+    "default": 14,
+    "description": "L2 要求最近多少天内无失败"
+  },
+  "l3_score": {
+    "type": "int",
+    "default": 150,
+    "description": "L3 所需积分"
+  },
+  "l3_days": {
+    "type": "int",
+    "default": 30,
+    "description": "L3 要求最近多少天内无回滚（需主人批准）"
+  }
+}

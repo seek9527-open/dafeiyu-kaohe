@@ -1,0 +1,24 @@
+[project]
+name = "dafeiyu-kaohe"
+version = "1.0.0"
+description = "大肥鱼的考核 (MoonGate) — AstrBot 插件：积分、等级、审批与熔断"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "溟月" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

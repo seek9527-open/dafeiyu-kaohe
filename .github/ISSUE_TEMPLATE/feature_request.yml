@@ -1,0 +1,34 @@
+name: 功能建议
+description: 提出一个新想法或改进
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+      description: 先讲场景，再讲方案
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案 / 已排除的做法
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及模块
+      multiple: true
+      options:
+        - 积分与等级
+        - 审批与批条
+        - 人格托管
+        - 安全 / 红线
+        - 文档
+        - CI / 工程化

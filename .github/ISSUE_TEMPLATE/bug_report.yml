@@ -1,0 +1,53 @@
+name: Bug 报告
+description: 报告一个问题（不是安全漏洞）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量把信息填完整；安全漏洞请走 [SECURITY.md](../blob/main/SECURITY.md) 的私密渠道。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 插件版本 / commit
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: AstrBot 版本、Python 版本、部署方式
+      placeholder: "AstrBot 4.29.3 / Python 3.12 / Docker"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 如果有报错，请贴出日志（去掉密钥）
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、gate.json 内容（删掉敏感字段）等

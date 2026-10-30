@@ -1,0 +1,35 @@
+# 字节码 / 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 本地数据 / 密钥
+gate.json
+events.jsonl
+notes.md
+backups/
+*.db
+.env
+*.pem
+*.key
+
+# 构建产物
+dist/
+build/
+*.egg-info/
