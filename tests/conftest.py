@@ -38,6 +38,20 @@ def _build_stubs():
 
             return deco
 
+        def on_llm_request(self, *args, **kwargs):
+            def deco(fn):
+                fn.__on_llm_request__ = (args, kwargs)
+                return fn
+
+            return deco
+
+        def event_message_type(self, *args, **kwargs):
+            def deco(fn):
+                fn.__event_message_type__ = (args, kwargs)
+                return fn
+
+            return deco
+
     event_mod.AstrMessageEvent = AstrMessageEvent
     event_mod.filter = _Filter()
 

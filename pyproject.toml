@@ -1,6 +1,6 @@
 [project]
 name = "dafeiyu-kaohe"
-version = "1.4.1"
+version = "1.4.2"
 description = "溟汐的考核 (MoonGate) — AstrBot 插件：积分、等级、审批与熔断"
 readme = "README.md"
 requires-python = ">=3.10"

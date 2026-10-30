@@ -112,7 +112,7 @@ def _sandbox_post(plugin_dir: Path, url: str, token: str, max_bytes: int, timeou
         return json.loads(resp.read().decode("utf-8"))
 
 
-@register(PLUGIN_NAME, "溟月和主人", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.1")
+@register(PLUGIN_NAME, "溟月和主人", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.2")
 class MoonWorkshop(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -130,6 +130,36 @@ class MoonWorkshop(Star):
         STAGING_DONE_ROOT.mkdir(parents=True, exist_ok=True)
         APPROVAL_ROOT.mkdir(parents=True, exist_ok=True)
         logger.info(f"[moon_workshop] {DISPLAY_NAME}已加载（staging={self.staging_required}）")
+        if self._companion_installed():
+            logger.info("[moon_workshop] 配套考核：已安装")
+        else:
+            logger.info("[moon_workshop] 配套考核：加载时尚未检测到（可能加载顺序靠后，首次对话时复核）")
+        self._companion_checked = False
+
+    # ---------------- 配套插件 ----------------
+
+    def _companion_installed(self) -> bool:
+        try:
+            return bool(self.context.get_registered_star("astrbot_plugin_moon_gate"))
+        except Exception:
+            return False
+
+    def _companion_text(self) -> str:
+        if self._companion_installed():
+            return "已安装"
+        return "未安装（没有考核，积分与提权都不会生效；推荐同装「溟汐的考核」）"
+
+    @filter.on_llm_request(priority=80)
+    async def _companion_check_once(self, event, req=None):
+        if getattr(self, "_companion_checked", False):
+            return None
+        self._companion_checked = True
+        if not self._companion_installed():
+            logger.warning(
+                "[moon_workshop] 没找到「溟汐的考核」(astrbot_plugin_moon_gate)，"
+                "读写/备份/沙箱仍可用，但没有积分与提权。"
+            )
+        return None
 
     def _conf(self, key: str, default):
         if isinstance(self.conf, dict):
@@ -702,7 +732,10 @@ class MoonWorkshop(Star):
             return
         dirs = sorted([d for d in STAGING_ROOT.iterdir() if d.is_dir()]) if STAGING_ROOT.is_dir() else []
         if not dirs:
-            yield event.plain_result("暂存区是空的。让本鲸先写草稿，写好会告诉主人来批。")
+            yield event.plain_result(
+                "暂存区是空的。让本鲸先写草稿，写好会告诉主人来批。\n"
+                f"配套考核：{self._companion_text()}"
+            )
             return
         lines = ["暂存区里等手续的草稿："]
         for d in dirs:
@@ -710,6 +743,7 @@ class MoonWorkshop(Star):
             state = "已批准" if self._read_approval(d.name) else "等主人批准"
             lines.append(f"· {d.name}（{n} 个文件，{state}）")
         lines.append("批准：/工坊 批准 <插件名>；驳回：/工坊 拒绝 <插件名>")
+        lines.append(f"配套考核：{self._companion_text()}")
         yield event.plain_result("\n".join(lines))
 
     @filter.llm_tool(name="ws_reload_plugin")

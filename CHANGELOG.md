@@ -2,6 +2,14 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.2] - 2026-10-31
+
+### 新增
+
+- 两个插件首次对话时互相检测：对端未安装则记一条 WARNING，并提示「两个插件要一起装」。
+- `/提权` 状态与 `/工坊 状态` 增加「配套插件」一行，直接显示对端是否已安装。
+- `astrbot_plugin_moon_gate` 升至 1.1.2，`astrbot_plugin_moon_workshop` 升至 1.3.2。
+
 ## [1.4.1] - 2026-10-31
 
 ### 变更

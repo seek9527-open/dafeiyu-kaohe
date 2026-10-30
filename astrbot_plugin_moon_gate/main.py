@@ -51,7 +51,7 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-@register(PLUGIN_NAME, "溟月和主人", "溟汐的考核：积分、等级、审批与熔断", "1.1.1")
+@register(PLUGIN_NAME, "溟月和主人", "溟汐的考核：积分、等级、审批与熔断", "1.1.2")
 class MoonGate(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
@@ -66,6 +66,36 @@ class MoonGate(Star):
             f"{TAG} {DISPLAY_NAME}已加载（score={self.state.get('score', 0)} "
             f"level={self.state.get('level', 0)}）"
         )
+        if self._companion_installed():
+            logger.info(f"{TAG} 配套工坊：已安装")
+        else:
+            logger.info(f"{TAG} 配套工坊：加载时尚未检测到（可能加载顺序靠后，首次对话时复核）")
+        self._companion_checked = False
+
+    # ---------------- 配套插件 ----------------
+
+    def _companion_installed(self) -> bool:
+        try:
+            return bool(self.context.get_registered_star("astrbot_plugin_moon_workshop"))
+        except Exception:
+            return False
+
+    def _companion_text(self) -> str:
+        if self._companion_installed():
+            return "已安装"
+        return "未安装（没有工坊，积分不会记账；请同装「溟月的工坊」）"
+
+    @filter.on_llm_request(priority=80)
+    async def _companion_check_once(self, event, req=None):
+        if getattr(self, "_companion_checked", False):
+            return None
+        self._companion_checked = True
+        if not self._companion_installed():
+            logger.warning(
+                f"{TAG} 没找到「溟月的工坊」(astrbot_plugin_moon_workshop)，"
+                "积分将永远停在 0。两个插件要一起装。"
+            )
+        return None
 
     # ---------------- 配置与状态 ----------------
 
@@ -212,6 +242,7 @@ class MoonGate(Star):
         }
         lines = [
             f"积分 {st.get('score', 0)}｜等级 {st.get('level', 0)}（{levels.get(int(st.get('level', 0)), '')}）",
+            f"配套工坊：{self._companion_text()}",
             f"成功写入 {self._count('write_ok')} 次｜语法失败 {self._count('syntax_fail')} 次｜回滚 {self._count('rollback_ok')} 次｜演练 {self._count('drill_ok')} 次",
         ]
         if st.get("pending_level"):

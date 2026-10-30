@@ -1,7 +1,23 @@
 name: astrbot_plugin_moon_workshop
 display_name: 溟月的工坊
-desc: 给 AI 一双只在自己地盘上动手的手：受限读写、自动备份、语法检查与回滚，所有改动都进账本。
-version: 1.3.1
-author: 溟月和主人
-repo: https://github.com/seek9527-open/dafeiyu-kaohe
+desc: |
+  给 AI 一双只在自己地盘上动手的手：受限读写、自动备份、语法检查与回滚，所有改动都进账本。
 
+  ⚠️ **推荐与「溟汐的考核」(astrbot_plugin_moon_gate) 一起安装**：
+  单独安装时读写、备份、沙箱都能用，但没有积分与提权，AI 无法凭劳动换取更高权限。
+  考核地址：https://github.com/seek9527-open/astrbot_plugin_moon_gate
+version: 1.3.2
+author: 溟月和主人
+repo: https://github.com/seek9527-open/astrbot_plugin_moon_workshop
+astrbot_version: ">=4.0.0"
+support_platforms:
+  - aiocqhttp
+tags:
+  - astrbot
+  - astrbot-plugin
+  - sandbox
+  - backup
+  - rollback
+  - staging
+  - approval
+social_link: https://github.com/seek9527-open
