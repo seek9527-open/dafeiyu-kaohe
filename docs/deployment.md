@@ -22,7 +22,7 @@ docker restart astrbot
 启动日志应出现：
 
 ```
-[moon_gate] 大肥鱼的考核已加载（score=0 level=0）
+[moon_gate] 溟汐的考核已加载（score=0 level=0）
 ```
 
 ## 配置

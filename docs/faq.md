@@ -42,7 +42,7 @@ L2 是审批制：达标后只会把 `pending_level` 设为 2，需要主人发 
 
 删 `gate.json` 并重启，或发 `/提权 重置`（只清等级，保留积分）。想连积分一起清就删文件。
 
-## 为什么仓库名不是「大肥鱼的考核」？
+## 为什么仓库名不是「溟汐的考核」？
 
 GitHub 仓库名只支持 ASCII，中文标题放在仓库的 Display Name / About 和 README 里。仓库名用 `dafeiyu-kaohe`，避免与已有的 `moon-gate` 系列项目撞车。
 

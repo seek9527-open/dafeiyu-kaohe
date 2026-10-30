@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""大肥鱼的考核（MoonGate）：积分、等级、审批与熔断。
+"""溟汐的考核（MoonGate）：积分、等级、审批与熔断。
 
 等级（达到条件后）
   L1  20 分 / 7 天无失败 / 3 次成功写入   → 可改 astrbot_plugin_moon_* 的配置
@@ -28,7 +28,7 @@ from astrbot.api.star import Context, Star, StarTools, register
 
 PLUGIN_NAME = "astrbot_plugin_moon_gate"
 TAG = "[moon_gate]"
-DISPLAY_NAME = "大肥鱼的考核"
+DISPLAY_NAME = "溟汐的考核"
 
 DATA_ROOT = Path("/AstrBot/data")
 CONFIG_ROOT = DATA_ROOT / "config"
@@ -51,7 +51,7 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-@register(PLUGIN_NAME, "溟月", "大肥鱼的考核：积分、等级、审批与熔断", "1.0.0")
+@register(PLUGIN_NAME, "溟月", "溟汐的考核：积分、等级、审批与熔断", "1.1.0")
 class MoonGate(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)

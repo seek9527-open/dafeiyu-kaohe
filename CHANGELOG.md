@@ -2,6 +2,14 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.0] - 2026-10-31
+
+### 变更
+
+- 项目显示名从「大肥鱼的考核」改为「溟汐的考核」：README、插件显示名、文档与许可证署名统一。
+- `astrbot_plugin_moon_gate` 版本升至 1.1.0（仅改名，无行为变化）。
+- 仓库名保持 `dafeiyu-kaohe`（GitHub 仓库名只支持 ASCII，公开链接不变）。
+
 ## [1.3.0] - 2026-10-31
 
 ### 新增
