@@ -1,6 +1,6 @@
-name: astrbot_plugin_moon_gate
+﻿name: astrbot_plugin_moon_gate
 display_name: 大肥鱼的考核
 desc: 给 AI 的自我提权装上三道闸：积分、审批、熔断。让插件自己挣权限，也让主人随时能收回去。
 version: 1.0.0
 author: 溟月
-repo: https://github.com/OWNER/dafeiyu-kaohe
+repo: https://github.com/seek9527-open/dafeiyu-kaohe

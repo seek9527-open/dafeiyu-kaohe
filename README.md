@@ -1,8 +1,8 @@
-# 大肥鱼的考核 · MoonGate
+﻿# 大肥鱼的考核 · MoonGate
 
 > 给 AstrBot 里的 AI 娘装一把「带锁的尺子」：她能在工坊里自由改插件，但要靠积分、等级和主人审批换来更大的权限。
 
-[![CI](https://github.com/OWNER/dafeiyu-kaohe/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/dafeiyu-kaohe/actions/workflows/ci.yml)
+[![CI](https://github.com/seek9527-open/dafeiyu-kaohe/actions/workflows/ci.yml/badge.svg)](https://github.com/seek9527-open/dafeiyu-kaohe/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
