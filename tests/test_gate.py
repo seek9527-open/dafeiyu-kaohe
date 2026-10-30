@@ -4,8 +4,6 @@ import asyncio
 import json
 import sqlite3
 
-import pytest
-
 
 class FakeEvent:
     def __init__(self, text="", admin=True):
