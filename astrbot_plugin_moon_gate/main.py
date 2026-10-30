@@ -51,7 +51,7 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-@register(PLUGIN_NAME, "溟月", "溟汐的考核：积分、等级、审批与熔断", "1.1.0")
+@register(PLUGIN_NAME, "溟月和主人", "溟汐的考核：积分、等级、审批与熔断", "1.1.1")
 class MoonGate(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)

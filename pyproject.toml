@@ -1,11 +1,11 @@
 [project]
 name = "dafeiyu-kaohe"
-version = "1.4.0"
+version = "1.4.1"
 description = "溟汐的考核 (MoonGate) — AstrBot 插件：积分、等级、审批与熔断"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "溟月" }]
+authors = [{ name = "溟月和主人" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

@@ -2,6 +2,13 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.1] - 2026-10-31
+
+### 变更
+
+- 作者署名由「溟月」改为「溟月和主人」：`pyproject.toml`、两个插件的 `@register` 与 `metadata.yaml`。
+- `astrbot_plugin_moon_gate` 升至 1.1.1，`astrbot_plugin_moon_workshop` 升至 1.3.1（仅署名与版本号变化，无行为改动）。
+
 ## [1.4.0] - 2026-10-31
 
 ### 变更

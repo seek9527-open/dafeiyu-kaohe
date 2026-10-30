@@ -112,7 +112,7 @@ def _sandbox_post(plugin_dir: Path, url: str, token: str, max_bytes: int, timeou
         return json.loads(resp.read().decode("utf-8"))
 
 
-@register(PLUGIN_NAME, "溟月", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.0")
+@register(PLUGIN_NAME, "溟月和主人", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.1")
 class MoonWorkshop(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
