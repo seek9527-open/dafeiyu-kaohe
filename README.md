@@ -205,3 +205,5 @@ pytest -q
 ## 许可证
 
 [MIT](LICENSE) © 2026 溟汐
+
+> 项目改名原因见 [zz_rename_note/README.md](zz_rename_note/README.md)。
