@@ -10,6 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_MAIN = ROOT / "astrbot_plugin_moon_gate" / "main.py"
+WORKSHOP_MAIN = ROOT / "astrbot_plugin_moon_workshop" / "main.py"
 
 
 def _build_stubs():
@@ -69,11 +70,26 @@ def _build_stubs():
     api.star = star_mod
     astrbot.api = api
 
+    core_mod = types.ModuleType("astrbot.core")
+    core_config_mod = types.ModuleType("astrbot.core.config")
+    astrbot_config_mod = types.ModuleType("astrbot.core.config.astrbot_config")
+
+    class AstrBotConfig(dict):
+        pass
+
+    astrbot_config_mod.AstrBotConfig = AstrBotConfig
+    core_config_mod.astrbot_config = astrbot_config_mod
+    core_mod.config = core_config_mod
+    astrbot.core = core_mod
+
     for name, module in (
         ("astrbot", astrbot),
         ("astrbot.api", api),
         ("astrbot.api.event", event_mod),
         ("astrbot.api.star", star_mod),
+        ("astrbot.core", core_mod),
+        ("astrbot.core.config", core_config_mod),
+        ("astrbot.core.config.astrbot_config", astrbot_config_mod),
     ):
         sys.modules.setdefault(name, module)
 
@@ -84,6 +100,14 @@ _build_stubs()
 @pytest.fixture()
 def gate_module():
     spec = importlib.util.spec_from_file_location("moon_gate_under_test", PLUGIN_MAIN)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture()
+def workshop_module():
+    spec = importlib.util.spec_from_file_location("moon_workshop_under_test", WORKSHOP_MAIN)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

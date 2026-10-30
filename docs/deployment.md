@@ -4,19 +4,20 @@
 
 - AstrBot 4.x（依赖 `context.persona_manager`、`_star_manager.reload`、`StarTools.get_data_dir`）；
 - Python 3.10+；
-- 如果要让计分自动流入，需要配合 [溟月的工坊](../README.md#与工坊的关系) 或任何按相同格式写 `events.jsonl` 的组件。
+- 如果要让计分自动流入，需要配合 [溟月的工坊](../README.md#配套插件溟月的工坊)（本仓库已附带）或任何按相同格式写 `events.jsonl` 的组件。
 
 ## 安装
 
-把 `astrbot_plugin_moon_gate/` 整个目录放进 AstrBot 的插件目录：
+把 `astrbot_plugin_moon_gate/` 与 `astrbot_plugin_moon_workshop/` 两个目录一起放进 AstrBot 的插件目录：
 
 ```bash
 # 容器部署
+docker cp astrbot_plugin_moon_workshop astrbot:/AstrBot/data/plugins/
 docker cp astrbot_plugin_moon_gate astrbot:/AstrBot/data/plugins/
 docker restart astrbot
 ```
 
-或手动放入 `data/plugins/astrbot_plugin_moon_gate/` 后重启 AstrBot。
+或手动放入 `data/plugins/astrbot_plugin_moon_gate/` 与 `data/plugins/astrbot_plugin_moon_workshop/` 后重启 AstrBot。
 
 启动日志应出现：
 

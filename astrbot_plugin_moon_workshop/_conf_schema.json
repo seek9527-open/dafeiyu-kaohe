@@ -1,0 +1,22 @@
+{
+  "max_files_per_turn": {
+    "type": "int",
+    "description": "一轮对话里最多允许改几个文件",
+    "default": 3
+  },
+  "backup_keep": {
+    "type": "int",
+    "description": "每个插件最多保留多少份备份",
+    "default": 20
+  },
+  "max_bytes": {
+    "type": "int",
+    "description": "单个文件大小上限（字节）",
+    "default": 2097152
+  },
+  "notes_file": {
+    "type": "string",
+    "description": "改动笔记的文件名（存在工坊数据目录里）",
+    "default": "notes.md"
+  }
+}

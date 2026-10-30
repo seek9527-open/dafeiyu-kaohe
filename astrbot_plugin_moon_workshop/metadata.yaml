@@ -1,0 +1,6 @@
+name: astrbot_plugin_moon_workshop
+display_name: 溟月的工坊
+desc: 给 AI 一双只在自己地盘上动手的手：受限读写、自动备份、语法检查与回滚，所有改动都进账本。
+version: 1.0.0
+author: 溟月
+repo: https://github.com/seek9527-open/dafeiyu-kaohe

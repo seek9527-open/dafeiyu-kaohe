@@ -1,4 +1,4 @@
-﻿# 大肥鱼的考核 · MoonGate
+# 大肥鱼的考核 · MoonGate
 
 > 给 AstrBot 里的 AI 娘装一把「带锁的尺子」：她能在工坊里自由改插件，但要靠积分、等级和主人审批换来更大的权限。
 
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
-> 本仓库同时是 AstrBot 插件 `astrbot_plugin_moon_gate` 的源码。设计目标不是「把她关起来」，而是**让她自己管自己**：先做对事，再拿权限；越线就掉分，出事就降级。
+> 本仓库同时是 AstrBot 插件 `astrbot_plugin_moon_gate` 与 `astrbot_plugin_moon_workshop` 的源码。设计目标不是「把她关起来」，而是**让她自己管自己**：先做对事，再拿权限；越线就掉分，出事就降级。
 
 ---
 
@@ -16,6 +16,7 @@
 - [核心特性](#核心特性)
 - [积分与等级](#积分与等级)
 - [命令与工具](#命令与工具)
+- [配套插件：溟月的工坊](#配套插件溟月的工坊)
 - [安装](#安装)
 - [配置](#配置)
 - [目录结构](#目录结构)
@@ -91,9 +92,33 @@
 | `gate_config_set(plugin, key, value)` | 在自己等级允许范围内改插件配置，成功后重载插件 |
 | `gate_persona_set(system_prompt)` | L2 起可改默认人格，改前备份 |
 
+## 配套插件：溟月的工坊
+
+考核的「手」来自 `astrbot_plugin_moon_workshop`。它给 AI 六个工具，让她只在指定范围里改代码：
+
+| 工具 | 说明 |
+| --- | --- |
+| `ws_list_files` | 列插件目录 / 工位里的文件 |
+| `ws_read_file` | 读文件（带行号） |
+| `ws_write_file` | 写文件（自动备份 + 语法检查） |
+| `ws_rollback` | 回滚到最近一次备份；`reason` 含「演练」时只算演练 |
+| `ws_check_syntax` | 单独做一次 `.py` / `.json` 语法检查 |
+| `ws_reload_plugin` | 重载指定插件 |
+
+边界（默认值）：
+
+- 可写 `data/plugins/` 与工坊工作台 `data/plugin_data/moon_workshop/workbench/`，可读范围再加工坊数据目录；
+- 只允许 `.py` / `.json` / `.md` / `.txt`，单文件 ≤ 2 MB；
+- 写前自动备份到 `backups/<插件桶>/<时间戳>/` 并记 `manifest.jsonl`（sha256、大小），每个插件桶保留 20 份；
+- `.py` 写后跑 `py_compile`，`.json` 跑 `json.loads`，不通过自动还原；
+- 每 600 秒最多改 3 个文件；禁止改工坊自己、禁止碰 `moon_gate`、`cmd_config.json`、`data_v4.db`、`.env`；
+- 只有管理员能用；每次写 / 回滚 / 重载都追加到 `notes.md`，并写事件账本 `events.jsonl` 供考核消费。
+
+> 两个插件可以分开装：只用工坊不装考核也能跑；反过来不行——考核的积分来源就是工坊的事件账本。
+
 ## 安装
 
-1. 把 `astrbot_plugin_moon_gate/` 整个目录放进 AstrBot 的 `data/plugins/`；
+1. 把 `astrbot_plugin_moon_workshop/` 和 `astrbot_plugin_moon_gate/` 两个目录都放进 AstrBot 的 `data/plugins/`；
 2. 确保工坊插件 `astrbot_plugin_moon_workshop` 已安装并会写 `data/plugin_data/moon_workshop/events.jsonl`；
 3. 重启 AstrBot，日志出现：
 
@@ -123,13 +148,17 @@
 
 ```
 .
-├── astrbot_plugin_moon_gate/     # 插件本体
+├── astrbot_plugin_moon_gate/       # 考核插件
 │   ├── main.py
 │   ├── _conf_schema.json
 │   └── metadata.yaml
-├── docs/                         # 设计、评分、安全、部署与 FAQ
-├── tests/                        # 可独立运行的单元测试
-├── .github/                      # CI、Issue / PR 模板
+├── astrbot_plugin_moon_workshop/   # 配套工坊插件
+│   ├── main.py
+│   ├── _conf_schema.json
+│   └── metadata.yaml
+├── docs/                           # 设计、评分、安全、部署与 FAQ
+├── tests/                          # 可独立运行的单元测试
+├── .github/                        # CI、Issue / PR 模板
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md
@@ -146,7 +175,7 @@ ruff check --select E9,F .
 pytest -q
 ```
 
-测试不依赖 AstrBot：`tests/conftest.py` 会注入最小桩模块，`tests/test_gate.py` 用临时目录模拟账本、配置与人格库。
+测试不依赖 AstrBot：`tests/conftest.py` 会注入最小桩模块；`tests/test_gate.py` 用临时目录模拟账本、配置与人格库，`tests/test_workshop.py` 覆盖工坊的路径白名单、备份、语法失败还原、回滚演练与每轮限流。
 
 ## 安全模型（请先读）
 
