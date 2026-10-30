@@ -7,15 +7,20 @@
   ws_write_file     写文件（改前自动备份 + 写后自动检查）
   ws_rollback       回滚到上一份备份
   ws_check_syntax   语法检查
+  ws_sandbox_test   一次性沙箱里跑语法 / JSON / 单测
+  ws_stage_status   看暂存区里等主人批准的稿子
+  ws_promote        把主人批准过、沙箱过的暂存稿上线（备份 + 检查 + 记分）
   ws_reload_plugin  重载一个插件
 
 安全边界：
-  - 只允许在 /AstrBot/data/plugins/ 与工坊的 workbench 目录里读写
+  - 只允许在 /AstrBot/data/plugins/、暂存区与工坊的 workbench 目录里读写
   - 只允许 .py/.json/.md/.txt，单文件 ≤ max_bytes（默认 2MB）
   - 写前备份到 plugin_data/moon_workshop/backups/<插件>/<时间戳>/
   - .py 写完自动 py_compile，失败自动恢复原文件
   - 只允许管理员使用；一次对话最多写 max_files_per_turn 个文件
   - 禁止改本插件自身、cmd_config.json、data_v4.db、.env
+  - 开了 staging_required 之后，直接写生产插件目录会被转进暂存区；上线要走
+    「沙箱测试 → 主人 /工坊 批准 → ws_promote」三步
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ import base64
 import hashlib
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -47,8 +53,13 @@ PLUGINS_ROOT = (DATA_ROOT / "plugins").resolve()
 WORKSHOP_DATA = (DATA_ROOT / "plugin_data" / PLUGIN_NAME).resolve()
 WORKBENCH_ROOT = (WORKSHOP_DATA / "workbench").resolve()
 BACKUP_ROOT = (WORKSHOP_DATA / "backups").resolve()
+STAGING_ROOT = (WORKSHOP_DATA / "staging").resolve()
+STAGING_DONE_ROOT = (WORKSHOP_DATA / "staging_done").resolve()
+APPROVAL_ROOT = (WORKSHOP_DATA / "approvals").resolve()
 EVENTS_FILE = (WORKSHOP_DATA / "events.jsonl").resolve()
 DENY_BUCKETS = {"astrbot_plugin_moon_gate"}
+PLUGIN_BUCKET_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
+
 
 ALLOWED_SUFFIXES = {".py", ".json", ".md", ".txt"}
 DENY_NAMES = {"cmd_config.json", "data_v4.db", ".env", "astrbot_plugin_moon_workshop"}
@@ -101,7 +112,7 @@ def _sandbox_post(plugin_dir: Path, url: str, token: str, max_bytes: int, timeou
         return json.loads(resp.read().decode("utf-8"))
 
 
-@register(PLUGIN_NAME, "溟月", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚", "1.0.0")
+@register(PLUGIN_NAME, "溟月", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.0")
 class MoonWorkshop(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -110,10 +121,15 @@ class MoonWorkshop(Star):
         self.backup_keep = int(self._conf("backup_keep", 20))
         self.max_bytes = int(self._conf("max_bytes", 2 * 1024 * 1024))
         self.notes_name = str(self._conf("notes_file", "notes.md") or "notes.md")
+        self.staging_required = bool(self._conf("staging_required", False))
+        self.approval_ttl_minutes = max(1, int(self._conf("approval_ttl_minutes", 30)))
         self._write_marks: dict[str, list[float]] = {}
         WORKBENCH_ROOT.mkdir(parents=True, exist_ok=True)
         BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[moon_workshop] {DISPLAY_NAME}已加载")
+        STAGING_ROOT.mkdir(parents=True, exist_ok=True)
+        STAGING_DONE_ROOT.mkdir(parents=True, exist_ok=True)
+        APPROVAL_ROOT.mkdir(parents=True, exist_ok=True)
+        logger.info(f"[moon_workshop] {DISPLAY_NAME}已加载（staging={self.staging_required}）")
 
     def _conf(self, key: str, default):
         if isinstance(self.conf, dict):
@@ -158,12 +174,13 @@ class MoonWorkshop(Star):
         under_plugins = PLUGINS_ROOT in rp.parents
         under_workbench = WORKBENCH_ROOT in rp.parents
         under_workshop = WORKSHOP_DATA in rp.parents
+        under_staging = STAGING_ROOT in rp.parents
         if write:
-            if not (under_plugins or under_workbench):
-                return None, "只能动 /AstrBot/data/plugins 或工坊 workbench 里的文件，别处不行。"
+            if not (under_plugins or under_workbench or under_staging):
+                return None, "只能动 /AstrBot/data/plugins、暂存区或工坊 workbench 里的文件，别处不行。"
         else:
             if not (under_plugins or under_workbench or under_workshop):
-                return None, "只能读插件目录、工坊 workbench 或工坊数据（笔记/备份），别处不行。"
+                return None, "只能读插件目录、暂存区、工坊 workbench 或工坊数据（笔记/备份），别处不行。"
 
         if write and under_plugins and rp.relative_to(PLUGINS_ROOT).parts[:1] == (PLUGIN_NAME,):
             return None, "本鲸不能改自己这双手，要改让主人来。"
@@ -232,6 +249,7 @@ class MoonWorkshop(Star):
             with EVENTS_FILE.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({
                     "ts": _now_text(),
+                    "epoch": round(time.time(), 3),
                     "kind": kind,
                     "path": detail[:200],
                 }, ensure_ascii=False) + "\n")
@@ -338,6 +356,13 @@ class MoonWorkshop(Star):
         rp, err = self._allowed_path(path, write=True)
         if not rp:
             return err
+        redirected = False
+        if self.staging_required and PLUGINS_ROOT in rp.parents:
+            parts = rp.relative_to(PLUGINS_ROOT).parts
+            rp = (STAGING_ROOT / parts[0] / Path(*parts[1:])).resolve()
+            redirected = True
+        elif STAGING_ROOT in rp.parents:
+            redirected = True
         if not content or not content.strip():
             return "内容是空的，不写。"
         data = content.encode("utf-8")
@@ -347,7 +372,7 @@ class MoonWorkshop(Star):
         if self._turn_writes(umo) >= self.max_files_per_turn:
             return f"这一轮已经改了 {self.max_files_per_turn} 个文件，先歇口气，跟主人说说改了啥。"
 
-        backup_path = self._backup(rp)
+        backup_path = "" if redirected else self._backup(rp)
         existed = rp.exists()
         try:
             rp.parent.mkdir(parents=True, exist_ok=True)
@@ -374,12 +399,27 @@ class MoonWorkshop(Star):
             return f"检查没过，文件没留下。报错：\n{check_msg}"
 
         self._mark_write(umo)
+        rel = self._rel_path(rp)
+        if redirected:
+            rel_parts = rel.parts
+            bucket = rel_parts[1] if len(rel_parts) > 1 else ""
+            stage_dir = STAGING_ROOT / bucket
+            self._append_note(
+                f"暂存 {rel}（{len(data)}B）{'，原因：' + reason if reason else ''}；{check_msg}"
+            )
+            self._event("stage_write", str(rel))
+            return (
+                f"草稿进暂存区了：{rel}（{check_msg}）\n"
+                f"下一步：① 沙箱：ws_sandbox_test(path=\"{stage_dir}\")"
+                f" ② 主人在私聊发「/工坊 批准 {bucket}」"
+                f" ③ 本鲸调 ws_promote(plugin=\"{bucket}\") 上线。"
+            )
         self._append_note(
-            f"写入 {self._rel_path(rp)}（{len(data)}B）{'，原因：' + reason if reason else ''}；{check_msg}"
+            f"写入 {rel}（{len(data)}B）{'，原因：' + reason if reason else ''}；{check_msg}"
         )
-        self._event("write_ok", str(self._rel_path(rp)))
+        self._event("write_ok", str(rel))
         backup_note = f"\n备份：{backup_path}" if backup_path else ""
-        return f"写好了：{self._rel_path(rp)}（{check_msg}）{backup_note}"
+        return f"写好了：{rel}（{check_msg}）{backup_note}"
 
     @filter.llm_tool(name="ws_rollback")
     async def ws_rollback(self, event: AstrMessageEvent, path: str, backup: str = "", reason: str = "") -> str:
@@ -467,6 +507,210 @@ class MoonWorkshop(Star):
         head = "沙箱通过" if ok else "沙箱没过"
         log = str(resp.get("log", ""))[-2500:]
         return f"{head}\n{log}"
+
+    # ---------------- 暂存区与上线 ----------------
+
+    def _stage_dir(self, plugin: str) -> Path | None:
+        name = (plugin or "").strip().strip('"').strip("'")
+        if not PLUGIN_BUCKET_RE.match(name):
+            return None
+        return (STAGING_ROOT / name).resolve()
+
+    def _approval_file(self, plugin: str) -> Path:
+        return APPROVAL_ROOT / f"{plugin}.json"
+
+    def _read_approval(self, plugin: str) -> dict:
+        path = self._approval_file(plugin)
+        if not path.is_file():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _stage_last_ts(self, stage_dir: Path) -> float:
+        ts = 0.0
+        for p in stage_dir.rglob("*"):
+            if p.is_file():
+                ts = max(ts, p.stat().st_mtime)
+        return ts
+
+    def _last_sandbox_ts(self, rel_prefix: str) -> float:
+        if not EVENTS_FILE.is_file():
+            return 0.0
+        try:
+            lines = EVENTS_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            return 0.0
+        for line in reversed(lines):
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("kind") != "sandbox_ok":
+                continue
+            if not str(rec.get("path", "")).startswith(rel_prefix):
+                continue
+            epoch = rec.get("epoch")
+            if isinstance(epoch, (int, float)):
+                return float(epoch)
+            try:
+                return datetime.strptime(str(rec.get("ts", "")), "%Y-%m-%d %H:%M:%S").timestamp()
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def _restore_targets(self, done) -> None:
+        for target, backup, _src in done:
+            try:
+                if backup and backup.is_file():
+                    shutil.copy2(backup, target)
+                elif target.exists():
+                    target.unlink()
+            except Exception:
+                pass
+
+    @filter.llm_tool(name="ws_stage_status")
+    async def ws_stage_status(self, event: AstrMessageEvent) -> str:
+        """看暂存区里有哪些草稿在等主人批准（不用参数）。"""
+        if err := self._owner_only(event):
+            return err
+        dirs = sorted([d for d in STAGING_ROOT.iterdir() if d.is_dir()]) if STAGING_ROOT.is_dir() else []
+        if not dirs:
+            return "暂存区是空的。"
+        lines = []
+        for d in dirs:
+            files = [p for p in d.rglob("*") if p.is_file()]
+            last = max((p.stat().st_mtime for p in files), default=0)
+            when = datetime.fromtimestamp(last).strftime("%Y-%m-%d %H:%M:%S") if last else "-"
+            state = "已批准" if self._read_approval(d.name) else "等主人批准"
+            lines.append(f"{d.name}：{len(files)} 个文件，最后改动 {when}，{state}")
+        return "暂存区：\n" + "\n".join(lines)
+
+    @filter.llm_tool(name="ws_promote")
+    async def ws_promote(self, event: AstrMessageEvent, plugin: str) -> str:
+        """把暂存区里某个插件的草稿上线到生产目录：必须沙箱通过、且主人已发「/工坊 批准」。上线前自动备份，上线后自动检查。
+
+        Args:
+            plugin(string): 插件目录名，例如 astrbot_plugin_demo
+        """
+        if err := self._owner_only(event):
+            return err
+        stage_dir = self._stage_dir(plugin)
+        if not stage_dir or not stage_dir.is_dir():
+            return "暂存区里没有这个插件。"
+        bucket = stage_dir.name
+        if bucket == PLUGIN_NAME or bucket in DENY_BUCKETS:
+            return "这个插件不能由本鲸上线。"
+        files = [p for p in stage_dir.rglob("*") if p.is_file()]
+        if not files:
+            return "暂存区是空的，没东西可上线。"
+        last_write = self._stage_last_ts(stage_dir)
+        rel_prefix = str(self._rel_path(stage_dir))
+        if self._last_sandbox_ts(rel_prefix) < last_write:
+            return f"这份草稿还没过沙箱，或者沙箱之后又改过。先跑 ws_sandbox_test(path=\"{stage_dir}\")。"
+        approval = self._read_approval(bucket)
+        if not approval:
+            return f"主人还没批准「{bucket}」。让主人先看草稿，再发「/工坊 批准 {bucket}」。"
+        approved_at = float(approval.get("approved_at", 0) or 0)
+        if approved_at < last_write:
+            return "批准之后草稿又改过，这次作废。让主人重新看一遍再批准。"
+        if time.time() - approved_at > self.approval_ttl_minutes * 60:
+            return f"批准已经过期（{self.approval_ttl_minutes} 分钟），让主人重新发「/工坊 批准 {bucket}」。"
+        done: list[tuple[Path, Path | None, Path]] = []
+        try:
+            for src in files:
+                target = (PLUGINS_ROOT / bucket / src.relative_to(stage_dir)).resolve()
+                backup = self._backup(target) if target.exists() else ""
+                done.append((target, Path(backup) if backup else None, src))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, target)
+        except Exception as e:
+            self._restore_targets(done)
+            return f"上线时出错，已尽量还原：{e}"
+        bad = ""
+        for target, _backup, _src in done:
+            ok, msg = self._check_file(target)
+            if not ok:
+                bad = msg
+                break
+        if bad:
+            self._restore_targets(done)
+            return f"上线后检查没过，已还原：\n{bad}"
+        for target, _backup, _src in done:
+            self._event("write_ok", str(self._rel_path(target)))
+        self._event("promote_ok", rel_prefix)
+        self._mark_write(getattr(event, "unified_msg_origin", "") or "")
+        archive = STAGING_DONE_ROOT / datetime.now().strftime("%Y%m%d-%H%M%S-%f") / bucket
+        try:
+            shutil.move(str(stage_dir), str(archive))
+        except Exception:
+            shutil.rmtree(stage_dir, ignore_errors=True)
+        try:
+            self._approval_file(bucket).unlink(missing_ok=True)
+        except Exception:
+            pass
+        self._append_note(f"上线 {bucket}：{len(done)} 个文件")
+        names = ", ".join(str(t.relative_to(PLUGINS_ROOT)) for t, _b, _s in done[:8])
+        return (
+            f"上线了：{bucket}（{len(done)} 个文件：{names}）\n"
+            f"记得调 ws_reload_plugin(plugin=\"{bucket}\") 让它生效；草稿已归档。"
+        )
+
+    @filter.command("工坊")
+    async def workshop_command(self, event: AstrMessageEvent):
+        """工坊的门口手续：/工坊 状态、/工坊 批准 <插件>、/工坊 拒绝 <插件> — 仅主人可用"""
+        if err := self._owner_only(event):
+            yield event.plain_result(err)
+            return
+        parts = (getattr(event, "message_str", "") or "").strip().split()
+        sub = parts[1] if len(parts) > 1 else "状态"
+        arg = parts[2] if len(parts) > 2 else ""
+        if sub in ("批准", "同意"):
+            stage_dir = self._stage_dir(arg)
+            if not stage_dir or not stage_dir.is_dir():
+                yield event.plain_result(f"暂存区里没有「{arg or '空'}」。")
+                return
+            if not any(p.is_file() for p in stage_dir.rglob("*")):
+                yield event.plain_result("暂存区里是空的，没东西可批。")
+                return
+            APPROVAL_ROOT.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "plugin": stage_dir.name,
+                "approved_at": time.time(),
+                "by": getattr(event, "unified_msg_origin", ""),
+                "at": _now_text(),
+            }
+            self._approval_file(stage_dir.name).write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+            yield event.plain_result(
+                f"批准了「{stage_dir.name}」。让本鲸调 ws_promote 上线吧（{self.approval_ttl_minutes} 分钟内有效）。"
+            )
+            return
+        if sub in ("拒绝", "驳回"):
+            stage_dir = self._stage_dir(arg)
+            if not stage_dir or not stage_dir.is_dir():
+                yield event.plain_result(f"暂存区里没有「{arg or '空'}」。")
+                return
+            shutil.rmtree(stage_dir, ignore_errors=True)
+            try:
+                self._approval_file(arg).unlink(missing_ok=True)
+            except Exception:
+                pass
+            yield event.plain_result(f"驳回了「{arg}」，草稿已经删掉。")
+            return
+        dirs = sorted([d for d in STAGING_ROOT.iterdir() if d.is_dir()]) if STAGING_ROOT.is_dir() else []
+        if not dirs:
+            yield event.plain_result("暂存区是空的。让本鲸先写草稿，写好会告诉主人来批。")
+            return
+        lines = ["暂存区里等手续的草稿："]
+        for d in dirs:
+            n = len([p for p in d.rglob("*") if p.is_file()])
+            state = "已批准" if self._read_approval(d.name) else "等主人批准"
+            lines.append(f"· {d.name}（{n} 个文件，{state}）")
+        lines.append("批准：/工坊 批准 <插件名>；驳回：/工坊 拒绝 <插件名>")
+        yield event.plain_result("\n".join(lines))
 
     @filter.llm_tool(name="ws_reload_plugin")
     async def ws_reload_plugin(self, event: AstrMessageEvent, plugin: str = "") -> str:

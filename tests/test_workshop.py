@@ -1,4 +1,4 @@
-"""工坊插件测试：路径白名单、备份、语法检查、回滚与限流。"""
+"""工坊插件测试：路径白名单、备份、语法检查、回滚、限流与暂存审批上线。"""
 
 import asyncio
 import io
@@ -7,8 +7,8 @@ import tarfile
 
 
 class FakeEvent:
-    def __init__(self, admin=True, umo="aiocqhttp:FriendMessage:1"):
-        self.message_str = ""
+    def __init__(self, admin=True, umo="aiocqhttp:FriendMessage:1", message_str=""):
+        self.message_str = message_str
         self.unified_msg_origin = umo
         self._admin = admin
 
@@ -23,6 +23,13 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def collect(agen):
+    async def _inner():
+        return [msg async for msg in agen]
+
+    return asyncio.run(_inner())
+
+
 def setup_env(tmp_path, monkeypatch, module):
     plugins = tmp_path / "plugins"
     plugins.mkdir()
@@ -32,6 +39,9 @@ def setup_env(tmp_path, monkeypatch, module):
     backups = data / "backups"
     backups.mkdir()
     events = data / "events.jsonl"
+    staging = data / "staging"
+    staging_done = data / "staging_done"
+    approvals = data / "approvals"
 
     class FakeStarManager:
         async def reload(self, name=None):
@@ -47,6 +57,9 @@ def setup_env(tmp_path, monkeypatch, module):
     monkeypatch.setattr(module, "WORKSHOP_DATA", data)
     monkeypatch.setattr(module, "WORKBENCH_ROOT", workbench)
     monkeypatch.setattr(module, "BACKUP_ROOT", backups)
+    monkeypatch.setattr(module, "STAGING_ROOT", staging)
+    monkeypatch.setattr(module, "STAGING_DONE_ROOT", staging_done)
+    monkeypatch.setattr(module, "APPROVAL_ROOT", approvals)
     monkeypatch.setattr(module, "EVENTS_FILE", events)
     return ctx, plugins, workbench, backups, events
 
@@ -173,3 +186,70 @@ def test_sandbox_tar_skips_data_dir(workshop_module, tmp_path):
     assert "_conf_schema.json" in names
     assert all(not name.startswith("data/") for name in names)
 
+
+def test_staging_redirects_live_write(workshop_module, tmp_path, monkeypatch):
+    ctx, plugins, _workbench, _backups, events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx, {"staging_required": True})
+
+    reply = run(ws.ws_write_file(FakeEvent(), str(plugins / "demo6" / "main.py"), "x = 1\n"))
+    assert "暂存区" in reply
+    assert not (plugins / "demo6" / "main.py").exists()
+    assert (workshop_module.STAGING_ROOT / "demo6" / "main.py").is_file()
+    assert events_of(events)[-1]["kind"] == "stage_write"
+
+
+def test_staging_write_allowed_directly(workshop_module, tmp_path, monkeypatch):
+    ctx, plugins, _workbench, _backups, events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx, {"staging_required": True})
+    staged = workshop_module.STAGING_ROOT / "demo7" / "notes.md"
+
+    reply = run(ws.ws_write_file(FakeEvent(), str(staged), "# 草稿", ""))
+    assert "写好了" in reply or "暂存" in reply
+    assert staged.is_file()
+
+
+def test_promote_requires_sandbox_and_approval(workshop_module, tmp_path, monkeypatch):
+    ctx, plugins, _workbench, _backups, events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx, {"staging_required": True})
+    run(ws.ws_write_file(FakeEvent(), str(plugins / "demo8" / "main.py"), "x = 1\n"))
+
+    reply = run(ws.ws_promote(FakeEvent(), "demo8"))
+    assert "沙箱" in reply
+
+    ws._event("sandbox_ok", "staging/demo8")
+    reply = run(ws.ws_promote(FakeEvent(), "demo8"))
+    assert "还没批准" in reply
+
+    msgs = collect(ws.workshop_command(FakeEvent(message_str="/工坊 批准 demo8")))
+    assert any("批准了" in m for m in msgs)
+
+    reply = run(ws.ws_promote(FakeEvent(), "demo8"))
+    assert "上线了" in reply
+    assert (plugins / "demo8" / "main.py").read_text(encoding="utf-8") == "x = 1\n"
+    assert not (workshop_module.STAGING_ROOT / "demo8").exists()
+    kinds = [e["kind"] for e in events_of(events)]
+    assert "promote_ok" in kinds
+    assert "write_ok" in kinds
+
+
+def test_promote_rejects_stale_approval(workshop_module, tmp_path, monkeypatch):
+    ctx, plugins, _workbench, _backups, _events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx, {"staging_required": True})
+    run(ws.ws_write_file(FakeEvent(), str(plugins / "demo9" / "main.py"), "x = 1\n"))
+    ws._event("sandbox_ok", "staging/demo9")
+    collect(ws.workshop_command(FakeEvent(message_str="/工坊 批准 demo9")))
+
+    run(ws.ws_write_file(FakeEvent(), str(plugins / "demo9" / "main.py"), "x = 2\n"))
+    reply = run(ws.ws_promote(FakeEvent(), "demo9"))
+    assert "又改过" in reply
+    assert not (plugins / "demo9" / "main.py").exists()
+
+
+def test_reject_removes_staging(workshop_module, tmp_path, monkeypatch):
+    ctx, plugins, _workbench, _backups, _events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx, {"staging_required": True})
+    run(ws.ws_write_file(FakeEvent(), str(plugins / "demo10" / "main.py"), "x = 1\n"))
+
+    msgs = collect(ws.workshop_command(FakeEvent(message_str="/工坊 拒绝 demo10")))
+    assert any("驳回" in m for m in msgs)
+    assert not (workshop_module.STAGING_ROOT / "demo10").exists()

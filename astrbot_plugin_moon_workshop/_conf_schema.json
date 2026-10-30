@@ -1,4 +1,14 @@
 {
+  "staging_required": {
+    "type": "bool",
+    "description": "开启后，直接写插件目录会被转进暂存区；草稿必须沙箱通过、主人批准后，才能用 ws_promote 上线",
+    "default": false
+  },
+  "approval_ttl_minutes": {
+    "type": "int",
+    "description": "主人批准的有效时间（分钟），过期或草稿又改过都要重新批准",
+    "default": 30
+  },
   "max_files_per_turn": {
     "type": "int",
     "description": "一轮对话里最多允许改几个文件",

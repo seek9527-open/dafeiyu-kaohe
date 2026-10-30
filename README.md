@@ -94,26 +94,34 @@
 
 ## 配套插件：溟月的工坊
 
-考核的「手」来自 `astrbot_plugin_moon_workshop`。它给 AI 六个工具，让她只在指定范围里改代码：
+考核的「手」来自 `astrbot_plugin_moon_workshop`。它给 AI 九个工具，让她只在指定范围里改代码：
 
 | 工具 | 说明 |
 | --- | --- |
 | `ws_list_files` | 列插件目录 / 工位里的文件 |
 | `ws_read_file` | 读文件（带行号） |
-| `ws_write_file` | 写文件（自动备份 + 语法检查） |
+| `ws_write_file` | 写文件（自动备份 + 语法检查）；开着暂存模式时，写生产目录会自动转进暂存区 |
 | `ws_rollback` | 回滚到最近一次备份；`reason` 含「演练」时只算演练 |
 | `ws_check_syntax` | 单独做一次 `.py` / `.json` 语法检查 |
 | `ws_sandbox_test` | 把插件目录送进一次性沙箱容器：语法、JSON、单测；沙箱无网络、不挂宿主目录、用完即毁 |
+| `ws_stage_status` | 看暂存区里有哪些草稿在等主人批准 |
+| `ws_promote` | 把「沙箱通过 + 主人批准」的草稿上线（上线前再备份、上线后再检查） |
 | `ws_reload_plugin` | 重载指定插件 |
 
 边界（默认值）：
 
-- 可写 `data/plugins/` 与工坊工作台 `data/plugin_data/moon_workshop/workbench/`，可读范围再加工坊数据目录；
+- 可写 `data/plugins/`、暂存区 `data/plugin_data/moon_workshop/staging/` 与工坊工作台，可读范围再加工坊数据目录；
 - 只允许 `.py` / `.json` / `.md` / `.txt`，单文件 ≤ 2 MB；
 - 写前自动备份到 `backups/<插件桶>/<时间戳>/` 并记 `manifest.jsonl`（sha256、大小），每个插件桶保留 20 份；
 - `.py` 写后跑 `py_compile`，`.json` 跑 `json.loads`，不通过自动还原；
 - 每 600 秒最多改 3 个文件；禁止改工坊自己、禁止碰 `moon_gate`、`cmd_config.json`、`data_v4.db`、`.env`；
 - 只有管理员能用；每次写 / 回滚 / 重载都追加到 `notes.md`，并写事件账本 `events.jsonl` 供考核消费。
+
+暂存模式（`staging_required: true`）开启后，写生产插件目录会被转进暂存区，上线必须走三步：
+
+1. `ws_sandbox_test(path=".../staging/<插件>")` —— 沙箱必须通过，且之后不能再改草稿；
+2. 主人在私聊发 `/工坊 批准 <插件>`（`/工坊 拒绝 <插件>` 删除草稿，`/工坊` 查看待批列表）；
+3. `ws_promote(plugin="<插件>")` —— 校验批准时效（默认 30 分钟）与沙箱时间，逐个备份后上线，再跑一遍检查，失败整体还原，最后归档草稿并清掉批准。
 
 > 两个插件可以分开装：只用工坊不装考核也能跑；反过来不行——考核的积分来源就是工坊的事件账本。
 
