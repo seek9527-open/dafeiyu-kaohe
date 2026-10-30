@@ -1,4 +1,4 @@
-# 安全策略
+﻿# 安全策略
 
 ## 支持范围
 
@@ -8,7 +8,7 @@
 
 **请不要直接开公开 Issue。**
 
-优先使用 GitHub 的 [私密漏洞报告](https://github.com/OWNER/dafeiyu-kaohe/security/advisories/new)；
+优先使用 GitHub 的 [私密漏洞报告](https://github.com/seek9527-open/dafeiyu-kaohe/security/advisories/new)；
 如果不可用，请通过仓库主页所列联系方式私下联系维护者，并在标题注明 `[SECURITY]`。
 
 我们会在 72 小时内确认收到，并在修复后于 `CHANGELOG.md` 与你公开致谢（除非你要求匿名）。
