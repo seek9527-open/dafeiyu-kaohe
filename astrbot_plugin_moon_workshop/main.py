@@ -14,7 +14,8 @@
 
 安全边界：
   - 只允许在 /AstrBot/data/plugins/、暂存区与工坊的 workbench 目录里读写
-  - 只允许 .py/.json/.md/.txt，单文件 ≤ max_bytes（默认 2MB）
+  - 读目录/读插件文件不套后缀；写文件只允许 .py/.json/.md/.txt/.yaml/.yml，单文件 ≤ max_bytes（默认 2MB）
+  - 沙箱打包会带上 metadata.yaml、LICENSE 这类正当文件，但跳过 data/、.git、.env 与数据库
   - 写前备份到 plugin_data/moon_workshop/backups/<插件>/<时间戳>/
   - .py 写完自动 py_compile，失败自动恢复原文件
   - 只允许管理员使用；一次对话最多写 max_files_per_turn 个文件
@@ -61,7 +62,7 @@ DENY_BUCKETS = {"astrbot_plugin_moon_gate"}
 PLUGIN_BUCKET_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 
 
-ALLOWED_SUFFIXES = {".py", ".json", ".md", ".txt"}
+ALLOWED_SUFFIXES = {".py", ".json", ".md", ".txt", ".yaml", ".yml"}
 DENY_NAMES = {"cmd_config.json", "data_v4.db", ".env", "astrbot_plugin_moon_workshop"}
 
 MAX_NOTE_CHARS = 300
@@ -80,7 +81,10 @@ def _sha256(path: Path) -> str:
 
 
 def _sandbox_tar(plugin_dir: Path, max_bytes: int) -> bytes:
+    """打包插件目录给沙箱。目录不是文件，先 on_file 过滤再谈后缀；
+    沙箱只做语法/JSON/单测检查，所以 metadata.yaml、LICENSE 这类正当文件也要带上。"""
     buf = io.BytesIO()
+    skip_names = {"cmd_config.json", "data_v4.db", ".env"}
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for p in sorted(plugin_dir.rglob("*")):
             if not p.is_file():
@@ -90,7 +94,9 @@ def _sandbox_tar(plugin_dir: Path, max_bytes: int) -> bytes:
                 continue
             if rel.parts and rel.parts[0] in {"data", ".git", "vendor"}:
                 continue
-            if p.suffix.lower() not in ALLOWED_SUFFIXES:
+            if p.name in skip_names or p.name.startswith("."):
+                continue
+            if p.suffix.lower() in {".db", ".sqlite", ".sqlite3", ".pem", ".key"}:
                 continue
             if p.stat().st_size > max_bytes:
                 continue
@@ -112,7 +118,7 @@ def _sandbox_post(plugin_dir: Path, url: str, token: str, max_bytes: int, timeou
         return json.loads(resp.read().decode("utf-8"))
 
 
-@register(PLUGIN_NAME, "溟月和主人", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.2")
+@register(PLUGIN_NAME, "溟月和主人", "给溟月一双只在自己地盘上动手的手：受限读写 + 自动备份 + 语法检查 + 回滚 + 暂存/审批上线", "1.3.3")
 class MoonWorkshop(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -191,25 +197,29 @@ class MoonWorkshop(Star):
         except Exception as e:
             return None, f"路径解析失败：{e}"
 
-        if rp.suffix.lower() not in ALLOWED_SUFFIXES:
-            return None, "只允许 .py / .json / .md / .txt 文件。"
-        if rp.name in DENY_NAMES:
-            return None, f"「{rp.name}」是红线文件，不能由本鲸动。"
-
-        if rp == PLUGINS_ROOT:
-            return None, "这是插件根目录，不是文件。"
-        if rp == WORKBENCH_ROOT:
-            return None, "这是工位根目录，不是文件。"
-
         under_plugins = PLUGINS_ROOT in rp.parents
         under_workbench = WORKBENCH_ROOT in rp.parents
         under_workshop = WORKSHOP_DATA in rp.parents
         under_staging = STAGING_ROOT in rp.parents
+
+        # 目录不是文件：先认它是不是目录，再谈后缀。ws_sandbox_test 传进来的就是插件目录。
+        if rp.is_dir():
+            if write:
+                return None, "这是目录，不是文件；要写内容请给到具体文件路径。"
+            if not (under_plugins or under_workbench or under_workshop or under_staging):
+                return None, "只能看插件目录、暂存区、工坊 workbench 或工坊数据（笔记/备份），别处不行。"
+            return rp, ""
+
+        if rp.name in DENY_NAMES:
+            return None, f"「{rp.name}」是红线文件，不能由本鲸动。"
+
         if write:
+            if rp.suffix.lower() not in ALLOWED_SUFFIXES:
+                return None, "只允许写 .py / .json / .md / .txt / .yaml / .yml 文件；看目录请用 ws_list_files。"
             if not (under_plugins or under_workbench or under_staging):
                 return None, "只能动 /AstrBot/data/plugins、暂存区或工坊 workbench 里的文件，别处不行。"
         else:
-            if not (under_plugins or under_workbench or under_workshop):
+            if not (under_plugins or under_workbench or under_workshop or under_staging):
                 return None, "只能读插件目录、暂存区、工坊 workbench 或工坊数据（笔记/备份），别处不行。"
 
         if write and under_plugins and rp.relative_to(PLUGINS_ROOT).parts[:1] == (PLUGIN_NAME,):
@@ -338,8 +348,13 @@ class MoonWorkshop(Star):
             rp = p.resolve()
         except Exception as e:
             return f"路径解析失败：{e}"
-        if not (rp == PLUGINS_ROOT or rp == WORKBENCH_ROOT or PLUGINS_ROOT in rp.parents or WORKBENCH_ROOT in rp.parents):
-            return "只能看插件目录或 workbench 里面。"
+        can_list = (
+            rp == PLUGINS_ROOT or rp == WORKBENCH_ROOT or rp == STAGING_ROOT or rp == WORKSHOP_DATA
+            or PLUGINS_ROOT in rp.parents or WORKBENCH_ROOT in rp.parents
+            or STAGING_ROOT in rp.parents or WORKSHOP_DATA in rp.parents
+        )
+        if not can_list:
+            return "只能看插件目录、暂存区、workbench 或工坊数据里面。"
         if not rp.is_dir():
             return f"不是目录：{rp}"
         lines = []

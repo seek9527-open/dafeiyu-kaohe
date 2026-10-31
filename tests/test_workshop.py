@@ -253,3 +253,64 @@ def test_reject_removes_staging(workshop_module, tmp_path, monkeypatch):
     msgs = collect(ws.workshop_command(FakeEvent(message_str="/工坊 拒绝 demo10")))
     assert any("驳回" in m for m in msgs)
     assert not (workshop_module.STAGING_ROOT / "demo10").exists()
+
+
+def test_directory_path_allowed_for_read_denied_for_write(workshop_module, tmp_path, monkeypatch):
+    """沙箱测试传进来的是目录：读目录要放行，写目录要明确拒绝——不能拿后缀去卡目录。"""
+    ctx, plugins, _workbench, _backups, _events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx)
+    d = plugins / "demo_dir"
+    d.mkdir()
+    (d / "metadata.yaml").write_text("name: demo\n", encoding="utf-8")
+
+    ok, msg = ws._allowed_path(str(d))
+    assert ok == d.resolve(), msg
+    assert not msg
+
+    denied, msg = ws._allowed_path(str(d), write=True)
+    assert denied is None
+    assert "目录" in msg
+
+    denied, msg = ws._allowed_path(str(tmp_path / "outside_dir"))
+    assert denied is None
+    assert msg
+
+
+def test_yaml_file_is_writable(workshop_module, tmp_path, monkeypatch):
+    """metadata.yaml 是插件目录里的正当文件，写它不该被后缀规则拒绝。"""
+    ctx, plugins, _workbench, _backups, _events = setup_env(tmp_path, monkeypatch, workshop_module)
+    ws = workshop_module.MoonWorkshop(ctx)
+    target = plugins / "demo_yaml" / "metadata.yaml"
+    target.parent.mkdir()
+    target.write_text("name: demo\nversion: 1\n", encoding="utf-8")
+
+    ok, msg = ws._allowed_path(str(target), write=True)
+    assert ok == target.resolve(), msg
+
+    reply = run(ws.ws_write_file(FakeEvent(), str(target), "name: demo\nversion: 2\n", "改版本"))
+    assert "写好了" in reply
+    assert "version: 2" in target.read_text(encoding="utf-8")
+
+
+def test_sandbox_tar_includes_aux_without_secrets(workshop_module, tmp_path):
+    """沙箱要能检查完整插件目录：metadata.yaml、LICENSE 进包，.env 与数据库不进。"""
+    plugin = tmp_path / "demo_aux"
+    plugin.mkdir()
+    (plugin / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (plugin / "metadata.yaml").write_text("name: demo\n", encoding="utf-8")
+    (plugin / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (plugin / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
+    (plugin / "cache.db").write_text("x", encoding="utf-8")
+    (plugin / "data").mkdir()
+    (plugin / "data" / "state.json").write_text("{}", encoding="utf-8")
+
+    raw = workshop_module._sandbox_tar(plugin, 1024 * 1024)
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+        names = tar.getnames()
+
+    assert "main.py" in names
+    assert "metadata.yaml" in names
+    assert "LICENSE" in names
+    assert ".env" not in names
+    assert "cache.db" not in names
+    assert all(not name.startswith("data/") for name in names)

@@ -2,6 +2,16 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.3] - 2026-10-31
+
+### 修复
+
+- 工坊的路径检查先认「目录」再谈后缀：`ws_sandbox_test` 传插件目录时不再被「只允许 .py / .json / .md / .txt」误拦。
+- 写文件后缀白名单加入 `.yaml` / `.yml`，`metadata.yaml` 可以正常读写了；读文件不再限制后缀（仍在白名单根目录内）。
+- 沙箱打包不再丢弃 `metadata.yaml`、`LICENSE` 等非白名单后缀的正当文件，同时跳过 `.env`、`*.db` 与 `data/`。
+- `ws_list_files` 也能列暂存区与工坊数据目录，方便查看待批草稿。
+- `astrbot_plugin_moon_workshop` 升至 1.3.3，作者仍为「溟月和主人」。
+- 新增 4 条回归测试：目录读放行、目录写拒绝、`metadata.yaml` 可写、沙箱包包含辅助文件但不含秘密。
 ## [1.4.2] - 2026-10-31
 
 ### 新增
